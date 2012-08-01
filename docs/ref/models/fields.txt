@@ -59,6 +59,9 @@ string, not ``NULL``.
     coerced for string-based fields that have the empty string as a possible
     value, and the value ``NULL`` will be stored to denote the empty string.
 
+If you want to accept :attr:`~Field.null` values with :class:`BooleanField`,
+use :class:`NullBooleanField` instead.
+
 ``blank``
 ---------
 
@@ -100,20 +103,26 @@ element is the human-readable name for the option.
 The choices list can be defined either as part of your model class::
 
     class Foo(models.Model):
-        GENDER_CHOICES = (
-            ('M', 'Male'),
-            ('F', 'Female'),
+        YEAR_IN_SCHOOL_CHOICES = (
+            ('FR', 'Freshman'),
+            ('SO', 'Sophomore'),
+            ('JR', 'Junior'),
+            ('SR', 'Senior'),
+            ('GR', 'Graduate'),
         )
-        gender = models.CharField(max_length=1, choices=GENDER_CHOICES)
+        year_in_school = models.CharField(max_length=2, choices=YEAR_IN_SCHOOL_CHOICES)
 
 or outside your model class altogether::
 
-    GENDER_CHOICES = (
-        ('M', 'Male'),
-        ('F', 'Female'),
+    YEAR_IN_SCHOOL_CHOICES = (
+        ('FR', 'Freshman'),
+        ('SO', 'Sophomore'),
+        ('JR', 'Junior'),
+        ('SR', 'Senior'),
+        ('GR', 'Graduate'),
     )
     class Foo(models.Model):
-        gender = models.CharField(max_length=1, choices=GENDER_CHOICES)
+        year_in_school = models.CharField(max_length=2, choices=YEAR_IN_SCHOOL_CHOICES)
 
 You can also collect your available choices into named groups that can
 be used for organizational purposes::
@@ -175,10 +184,11 @@ If ``True``, djadmin:`django-admin.py sqlindexes <sqlindexes>` will output a
 
 .. attribute:: Field.db_tablespace
 
-The name of the database tablespace to use for this field's index, if this field
-is indexed. The default is the project's :setting:`DEFAULT_INDEX_TABLESPACE`
-setting, if set, or the :attr:`~Field.db_tablespace` of the model, if any. If
-the backend doesn't support tablespaces, this option is ignored.
+The name of the :doc:`database tablespace </topics/db/tablespaces>` to use for
+this field's index, if this field is indexed. The default is the project's
+:setting:`DEFAULT_INDEX_TABLESPACE` setting, if set, or the
+:attr:`~Options.db_tablespace` of the model, if any. If the backend doesn't
+support tablespaces for indexes, this option is ignored.
 
 ``default``
 -----------
@@ -206,6 +216,10 @@ automatically generated from the model class. Default is ``True``.
 The ``error_messages`` argument lets you override the default messages that the
 field will raise. Pass in a dictionary with keys matching the error messages you
 want to override.
+
+Error message keys include ``null``, ``blank``, ``invalid``, ``invalid_choice``,
+and ``unique``. Additional error message keys are specified for each field in
+the `Field types`_ section below.
 
 ``help_text``
 -------------
@@ -300,7 +314,7 @@ underscores to spaces. See :ref:`Verbose field names <verbose-field-names>`.
 
 .. attribute:: Field.validators
 
-A list of validators to run for this field.See the :doc:`validators
+A list of validators to run for this field. See the :doc:`validators
 documentation </ref/validators>` for more information.
 
 .. _model-field-types:
@@ -341,8 +355,10 @@ A true/false field.
 
 The admin represents this as a checkbox.
 
-.. versionchanged:: 1.2
+If you need to accept :attr:`~Field.null` values then use
+:class:`NullBooleanField` instead.
 
+.. versionchanged:: 1.2
     In previous versions of Django when running under MySQL ``BooleanFields``
     would return their data as ``ints``, instead of true ``bools``.  See the
     release notes for a complete description of the change.
@@ -410,8 +426,8 @@ optional arguments:
     it's not just a default value that you can override.
 
 The admin represents this as an ``<input type="text">`` with a JavaScript
-calendar, and a shortcut for "Today".  The JavaScript calendar will always
-start the week on a Sunday.
+calendar, and a shortcut for "Today". Includes an additional ``invalid_date``
+error message key.
 
 .. note::
     As currently implemented, setting ``auto_now`` or ``auto_now_add`` to
@@ -440,7 +456,7 @@ A fixed-precision decimal number, represented in Python by a
 .. attribute:: DecimalField.max_digits
 
     The maximum number of digits allowed in the number. Note that this number
-    must be greater than ``decimal_places``, if it exists.
+    must be greater than or equal to ``decimal_places``, if it exists.
 
 .. attribute:: DecimalField.decimal_places
 
@@ -469,7 +485,7 @@ The admin represents this as an ``<input type="text">`` (a single-line input).
 
 .. class:: EmailField([max_length=75, **options])
 
-A :class:`CharField` that checks that the value is a valid e-mail address.
+A :class:`CharField` that checks that the value is a valid email address.
 
 ``FileField``
 -------------
@@ -490,9 +506,9 @@ Has one **required** argument:
     setting to determine the value of the :attr:`~django.core.files.File.url`
     attribute.
 
-    This path may contain `strftime formatting`_, which will be replaced by the
-    date/time of the file upload (so that uploaded files don't fill up the given
-    directory).
+    This path may contain :func:`~time.strftime` formatting, which will be
+    replaced by the date/time of the file upload (so that uploaded files don't
+    fill up the given directory).
 
     This may also be a callable, such as a function, which will be called to
     obtain the upload path, including the filename. This callable must be able
@@ -500,23 +516,23 @@ Has one **required** argument:
     to be passed along to the storage system. The two arguments that will be
     passed are:
 
-        ======================  ===============================================
-        Argument                Description
-        ======================  ===============================================
-        ``instance``            An instance of the model where the
-                                ``FileField`` is defined. More specifically,
-                                this is the particular instance where the
-                                current file is being attached.
+    ======================  ===============================================
+    Argument                Description
+    ======================  ===============================================
+    ``instance``            An instance of the model where the
+                            ``FileField`` is defined. More specifically,
+                            this is the particular instance where the
+                            current file is being attached.
 
-                                In most cases, this object will not have been
-                                saved to the database yet, so if it uses the
-                                default ``AutoField``, *it might not yet have a
-                                value for its primary key field*.
+                            In most cases, this object will not have been
+                            saved to the database yet, so if it uses the
+                            default ``AutoField``, *it might not yet have a
+                            value for its primary key field*.
 
-        ``filename``            The filename that was originally given to the
-                                file. This may or may not be taken into account
-                                when determining the final destination path.
-        ======================  ===============================================
+    ``filename``            The filename that was originally given to the
+                            file. This may or may not be taken into account
+                            when determining the final destination path.
+    ======================  ===============================================
 
 Also has one optional argument:
 
@@ -531,29 +547,29 @@ widget).
 Using a :class:`FileField` or an :class:`ImageField` (see below) in a model
 takes a few steps:
 
-    1. In your settings file, you'll need to define :setting:`MEDIA_ROOT` as the
-       full path to a directory where you'd like Django to store uploaded files.
-       (For performance, these files are not stored in the database.) Define
-       :setting:`MEDIA_URL` as the base public URL of that directory. Make sure
-       that this directory is writable by the Web server's user account.
+1. In your settings file, you'll need to define :setting:`MEDIA_ROOT` as the
+   full path to a directory where you'd like Django to store uploaded files.
+   (For performance, these files are not stored in the database.) Define
+   :setting:`MEDIA_URL` as the base public URL of that directory. Make sure
+   that this directory is writable by the Web server's user account.
 
-    2. Add the :class:`FileField` or :class:`ImageField` to your model, making
-       sure to define the :attr:`~FileField.upload_to` option to tell Django
-       to which subdirectory of :setting:`MEDIA_ROOT` it should upload files.
+2. Add the :class:`FileField` or :class:`ImageField` to your model, making
+   sure to define the :attr:`~FileField.upload_to` option to tell Django
+   to which subdirectory of :setting:`MEDIA_ROOT` it should upload files.
 
-    3. All that will be stored in your database is a path to the file
-       (relative to :setting:`MEDIA_ROOT`). You'll most likely want to use the
-       convenience :attr:`~django.core.files.File.url` function provided by
-       Django. For example, if your :class:`ImageField` is called ``mug_shot``,
-       you can get the absolute path to your image in a template with
-       ``{{ object.mug_shot.url }}``.
+3. All that will be stored in your database is a path to the file
+   (relative to :setting:`MEDIA_ROOT`). You'll most likely want to use the
+   convenience :attr:`~django.core.files.File.url` function provided by
+   Django. For example, if your :class:`ImageField` is called ``mug_shot``,
+   you can get the absolute path to your image in a template with
+   ``{{ object.mug_shot.url }}``.
 
 For example, say your :setting:`MEDIA_ROOT` is set to ``'/home/media'``, and
 :attr:`~FileField.upload_to` is set to ``'photos/%Y/%m/%d'``. The ``'%Y/%m/%d'``
-part of :attr:`~FileField.upload_to` is `strftime formatting`_; ``'%Y'`` is the
-four-digit year, ``'%m'`` is the two-digit month and ``'%d'`` is the two-digit
-day. If you upload a file on Jan. 15, 2007, it will be saved in the directory
-``/home/media/photos/2007/01/15``.
+part of :attr:`~FileField.upload_to` is :func:`~time.strftime` formatting;
+``'%Y'`` is the four-digit year, ``'%m'`` is the two-digit month and ``'%d'`` is
+the two-digit day. If you upload a file on Jan. 15, 2007, it will be saved in
+the directory ``/home/media/photos/2007/01/15``.
 
 If you wanted to retrieve the uploaded file's on-disk filename, or the file's
 size, you could use the :attr:`~django.core.files.File.name` and
@@ -562,10 +578,17 @@ information on the available attributes and methods, see the
 :class:`~django.core.files.File` class reference and the :doc:`/topics/files`
 topic guide.
 
+.. note::
+    The file is saved as part of saving the model in the database, so the actual
+    file name used on disk cannot be relied on until after the model has been
+    saved.
+
 The uploaded file's relative URL can be obtained using the
 :attr:`~django.db.models.fields.FileField.url` attribute. Internally,
 this calls the :meth:`~django.core.files.storage.Storage.url` method of the
 underlying :class:`~django.core.files.storage.Storage` class.
+
+.. _file-upload-security:
 
 Note that whenever you deal with uploaded files, you should pay close attention
 to where you're uploading them and what type of files they are, to avoid
@@ -575,11 +598,13 @@ without validation, to a directory that's within your Web server's document
 root, then somebody could upload a CGI or PHP script and execute that script by
 visiting its URL on your site. Don't allow that.
 
+Also note that even an uploaded HTML file, since it can be executed by the
+browser (though not by the server), can pose security threats that are
+equivalent to XSS or CSRF attacks.
+
 By default, :class:`FileField` instances are
 created as ``varchar(100)`` columns in your database. As with other fields, you
 can change the maximum length using the :attr:`~CharField.max_length` argument.
-
-.. _`strftime formatting`: http://docs.python.org/library/time.html#time.strftime
 
 FileField and FieldFile
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -695,11 +720,8 @@ The admin represents this as an ``<input type="text">`` (a single-line input).
     :class:`DecimalField` class. Although they both represent real numbers, they
     represent those numbers differently. ``FloatField`` uses Python's ``float``
     type internally, while ``DecimalField`` uses Python's ``Decimal`` type. For
-    information on the difference between the two, see Python's documentation on
-    `Decimal fixed point and floating point arithmetic`_.
-
-.. _Decimal fixed point and floating point arithmetic: http://docs.python.org/library/decimal.html
-
+    information on the difference between the two, see Python's documentation
+    for the :mod:`decimal` module.
 
 ``ImageField``
 --------------
@@ -750,6 +772,36 @@ single-line input).
 An IP address, in string format (e.g. "192.0.2.30"). The admin represents this
 as an ``<input type="text">`` (a single-line input).
 
+``GenericIPAddressField``
+-------------------------
+
+.. class:: GenericIPAddressField([protocol=both, unpack_ipv4=False, **options])
+
+.. versionadded:: 1.4
+
+An IPv4 or IPv6 address, in string format (e.g. ``192.0.2.30`` or
+``2a02:42fe::4``). The admin represents this as an ``<input type="text">``
+(a single-line input).
+
+The IPv6 address normalization follows :rfc:`4291#section-2.2` section 2.2,
+including using the IPv4 format suggested in paragraph 3 of that section, like
+``::ffff:192.0.2.0``. For example, ``2001:0::0:01`` would be normalized to
+``2001::1``, and ``::ffff:0a0a:0a0a`` to ``::ffff:10.10.10.10``. All characters
+are converted to lowercase.
+
+.. attribute:: GenericIPAddressField.protocol
+
+    Limits valid inputs to the specified protocol.
+    Accepted values are ``'both'`` (default), ``'IPv4'``
+    or ``'IPv6'``. Matching is case insensitive.
+
+.. attribute:: GenericIPAddressField.unpack_ipv4
+
+    Unpacks IPv4 mapped addresses like ``::ffff::192.0.2.1``.
+    If this option is enabled that address would be unpacked to
+    ``192.0.2.1``. Default is disabled. Can only be used
+    when ``protocol`` is set to ``'both'``.
+
 ``NullBooleanField``
 --------------------
 
@@ -764,7 +816,8 @@ this as a ``<select>`` box with "Unknown", "Yes" and "No" choices.
 
 .. class:: PositiveIntegerField([**options])
 
-Like an :class:`IntegerField`, but must be positive.
+Like an :class:`IntegerField`, but must be either positive or zero (`0`).
+The value `0` is accepted for backward compatibility reasons.
 
 ``PositiveSmallIntegerField``
 -----------------------------
@@ -835,11 +888,9 @@ shortcuts.
 
 A :class:`CharField` for a URL. Has one extra optional argument:
 
-.. deprecated:: 1.3.1
-
-   ``verify_exists`` is deprecated for security reasons as of 1.3.1
-   and will be removed in 1.4. Prior to 1.3.1, the default value was
-   ``True``.
+.. deprecated:: 1.4
+   ``verify_exists`` is deprecated for security reasons as of 1.4 and will be
+   removed in Django 1.5. Prior to 1.3.1, the default value was ``True``.
 
 .. attribute:: URLField.verify_exists
 
@@ -856,21 +907,6 @@ The admin represents this as an ``<input type="text">`` (a single-line input).
 Like all :class:`CharField` subclasses, :class:`URLField` takes the optional
 :attr:`~CharField.max_length`argument. If you don't specify
 :attr:`~CharField.max_length`, a default of 200 is used.
-
-``XMLField``
-------------
-
-.. deprecated:: 1.3
-   ``XMLField`` is deprecated. Use TextField instead.
-
-.. class:: XMLField(schema_path=None, [**options])
-
-A :class:`TextField` that stores XML data and a path to a schema. Takes one
-optional argument:
-
-.. attribute:: schema_path
-
-    The filesystem path to a schema for the field.
 
 
 Relationship fields
