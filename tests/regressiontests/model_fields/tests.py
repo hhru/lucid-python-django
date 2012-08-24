@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+
 import datetime
 from decimal import Decimal
 
@@ -8,18 +10,15 @@ from django.db import models
 from django.db.models.fields.files import FieldFile
 from django.utils import unittest
 
-from models import Foo, Bar, Whiz, BigD, BigS, Image, BigInt, Post, NullBooleanModel, BooleanModel, Document
+from .models import (Foo, Bar, Whiz, BigD, BigS, Image, BigInt, Post,
+    NullBooleanModel, BooleanModel, Document, RenamedField)
 
 # If PIL available, do these tests.
 if Image:
-    from imagefield import \
-            ImageFieldTests, \
-            ImageFieldTwoDimensionsTests, \
-            ImageFieldNoDimensionsTests, \
-            ImageFieldOneDimensionTests, \
-            ImageFieldDimensionsFirstTests, \
-            ImageFieldUsingFileTests, \
-            TwoImageFieldTests
+    from .imagefield import (ImageFieldTests, ImageFieldTwoDimensionsTests,
+        TwoImageFieldTests, ImageFieldNoDimensionsTests,
+        ImageFieldOneDimensionTests, ImageFieldDimensionsFirstTests,
+        ImageFieldUsingFileTests)
 
 
 class BasicFieldTests(test.TestCase):
@@ -47,6 +46,24 @@ class BasicFieldTests(test.TestCase):
             nullboolean.full_clean()
         except ValidationError, e:
             self.fail("NullBooleanField failed validation with value of None: %s" % e.messages)
+
+    def test_field_repr(self):
+        """
+        Regression test for #5931: __repr__ of a field also displays its name
+        """
+        f = Foo._meta.get_field('a')
+        self.assertEqual(repr(f), '<django.db.models.fields.CharField: a>')
+        f = models.fields.CharField()
+        self.assertEqual(repr(f), '<django.db.models.fields.CharField>')
+
+    def test_field_name(self):
+        """
+        Regression test for #14695: explicitly defined field name overwritten
+        by model's attribute name.
+        """
+        instance = RenamedField()
+        self.assertTrue(hasattr(instance, 'get_fieldname_display'))
+        self.assertFalse(hasattr(instance, 'get_modelname_display'))
 
 class DecimalFieldTests(test.TestCase):
     def test_to_python(self):
