@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import with_statement
+from __future__ import unicode_literals
 
 from django.conf import settings
 from django.core.context_processors import csrf
@@ -7,12 +7,13 @@ from django.http import HttpRequest, HttpResponse
 from django.middleware.csrf import CsrfViewMiddleware, CSRF_KEY_LENGTH
 from django.template import RequestContext, Template
 from django.test import TestCase
+from django.test.utils import override_settings
 from django.views.decorators.csrf import csrf_exempt, requires_csrf_token, ensure_csrf_cookie
 
 
 # Response/views used for CsrfResponseMiddleware and CsrfViewMiddleware tests
 def post_form_response():
-    resp = HttpResponse(content=u"""
+    resp = HttpResponse(content="""
 <html><body><h1>\u00a1Unicode!<form method="post"><input type="text" /></form></body></html>
 """, mimetype="text/html")
     return resp
@@ -48,7 +49,7 @@ class TestingHttpRequest(HttpRequest):
 class CsrfViewMiddlewareTest(TestCase):
     # The csrf token is potentially from an untrusted source, so could have
     # characters that need dealing with.
-    _csrf_id_cookie = "<1>\xc2\xa1"
+    _csrf_id_cookie = b"<1>\xc2\xa1"
     _csrf_id = "1"
 
     def _get_GET_no_csrf_cookie_request(self):
@@ -216,18 +217,18 @@ class CsrfViewMiddlewareTest(TestCase):
         """
         req = self._get_GET_no_csrf_cookie_request()
         resp = token_view(req)
-        self.assertEqual(u"", resp.content)
+        self.assertEqual(resp.content, b'')
 
     def test_token_node_empty_csrf_cookie(self):
         """
         Check that we get a new token if the csrf_cookie is the empty string
         """
         req = self._get_GET_no_csrf_cookie_request()
-        req.COOKIES[settings.CSRF_COOKIE_NAME] = ""
+        req.COOKIES[settings.CSRF_COOKIE_NAME] = b""
         CsrfViewMiddleware().process_view(req, token_view, (), {})
         resp = token_view(req)
 
-        self.assertNotEqual(u"", resp.content)
+        self.assertNotEqual("", resp.content)
 
     def test_token_node_with_csrf_cookie(self):
         """
@@ -267,6 +268,7 @@ class CsrfViewMiddlewareTest(TestCase):
         csrf_cookie = resp2.cookies[settings.CSRF_COOKIE_NAME]
         self._check_token_present(resp, csrf_id=csrf_cookie.value)
 
+    @override_settings(ALLOWED_HOSTS=['www.example.com'])
     def test_https_bad_referer(self):
         """
         Test that a POST HTTPS request with a bad referer is rejected
@@ -279,6 +281,7 @@ class CsrfViewMiddlewareTest(TestCase):
         self.assertNotEqual(None, req2)
         self.assertEqual(403, req2.status_code)
 
+    @override_settings(ALLOWED_HOSTS=['www.example.com'])
     def test_https_good_referer(self):
         """
         Test that a POST HTTPS request with a good referer is accepted
@@ -290,6 +293,7 @@ class CsrfViewMiddlewareTest(TestCase):
         req2 = CsrfViewMiddleware().process_view(req, post_form_view, (), {})
         self.assertEqual(None, req2)
 
+    @override_settings(ALLOWED_HOSTS=['www.example.com'])
     def test_https_good_referer_2(self):
         """
         Test that a POST HTTPS request with a good referer is accepted

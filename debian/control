@@ -10,7 +10,7 @@ Build-Depends:
   python,
   python-all-dev (>= 2.5),
   python-setuptools
-Standards-Version: 1.3.1
+Standards-Version: 1.5.1
 
 Package: python-django
 Architecture: all

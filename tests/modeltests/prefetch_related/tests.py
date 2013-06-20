@@ -1,13 +1,14 @@
-from __future__ import with_statement, absolute_import
+from __future__ import absolute_import, unicode_literals
 
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import override_settings
+from django.utils import six
 
 from .models import (Author, Book, Reader, Qualification, Teacher, Department,
     TaggedItem, Bookmark, AuthorAddress, FavoriteAuthors, AuthorWithAge,
-    BookWithYear, Person, House, Room, Employee, Comment)
+    BookWithYear, BookReview, Person, House, Room, Employee, Comment)
 
 
 class PrefetchRelatedTests(TestCase):
@@ -66,7 +67,15 @@ class PrefetchRelatedTests(TestCase):
             lists = [list(b.first_time_authors.all())
                      for b in Book.objects.prefetch_related('first_time_authors')]
 
-        self.assertQuerysetEqual(self.book2.authors.all(), [u"<Author: Charlotte>"])
+        self.assertQuerysetEqual(self.book2.authors.all(), ["<Author: Charlotte>"])
+
+    def test_onetoone_reverse_no_match(self):
+        # Regression for #17439
+        with self.assertNumQueries(2):
+            book = Book.objects.prefetch_related('bookwithyear').all()[0]
+        with self.assertNumQueries(0):
+            with self.assertRaises(BookWithYear.DoesNotExist):
+                book.bookwithyear
 
     def test_survives_clone(self):
         with self.assertNumQueries(2):
@@ -112,41 +121,41 @@ class PrefetchRelatedTests(TestCase):
         """
         with self.assertNumQueries(3):
             qs = Author.objects.prefetch_related('books__read_by')
-            lists = [[[unicode(r) for r in b.read_by.all()]
+            lists = [[[six.text_type(r) for r in b.read_by.all()]
                       for b in a.books.all()]
                      for a in qs]
             self.assertEqual(lists,
             [
-                [[u"Amy"], [u"Belinda"]],  # Charlotte - Poems, Jane Eyre
-                [[u"Amy"]],                # Anne - Poems
-                [[u"Amy"], []],            # Emily - Poems, Wuthering Heights
-                [[u"Amy", u"Belinda"]],    # Jane - Sense and Sense
+                [["Amy"], ["Belinda"]],  # Charlotte - Poems, Jane Eyre
+                [["Amy"]],                # Anne - Poems
+                [["Amy"], []],            # Emily - Poems, Wuthering Heights
+                [["Amy", "Belinda"]],    # Jane - Sense and Sense
             ])
 
     def test_overriding_prefetch(self):
         with self.assertNumQueries(3):
             qs = Author.objects.prefetch_related('books', 'books__read_by')
-            lists = [[[unicode(r) for r in b.read_by.all()]
+            lists = [[[six.text_type(r) for r in b.read_by.all()]
                       for b in a.books.all()]
                      for a in qs]
             self.assertEqual(lists,
             [
-                [[u"Amy"], [u"Belinda"]],  # Charlotte - Poems, Jane Eyre
-                [[u"Amy"]],                # Anne - Poems
-                [[u"Amy"], []],            # Emily - Poems, Wuthering Heights
-                [[u"Amy", u"Belinda"]],    # Jane - Sense and Sense
+                [["Amy"], ["Belinda"]],  # Charlotte - Poems, Jane Eyre
+                [["Amy"]],                # Anne - Poems
+                [["Amy"], []],            # Emily - Poems, Wuthering Heights
+                [["Amy", "Belinda"]],    # Jane - Sense and Sense
             ])
         with self.assertNumQueries(3):
             qs = Author.objects.prefetch_related('books__read_by', 'books')
-            lists = [[[unicode(r) for r in b.read_by.all()]
+            lists = [[[six.text_type(r) for r in b.read_by.all()]
                       for b in a.books.all()]
                      for a in qs]
             self.assertEqual(lists,
             [
-                [[u"Amy"], [u"Belinda"]],  # Charlotte - Poems, Jane Eyre
-                [[u"Amy"]],                # Anne - Poems
-                [[u"Amy"], []],            # Emily - Poems, Wuthering Heights
-                [[u"Amy", u"Belinda"]],    # Jane - Sense and Sense
+                [["Amy"], ["Belinda"]],  # Charlotte - Poems, Jane Eyre
+                [["Amy"]],                # Anne - Poems
+                [["Amy"], []],            # Emily - Poems, Wuthering Heights
+                [["Amy", "Belinda"]],    # Jane - Sense and Sense
             ])
 
     def test_get(self):
@@ -156,9 +165,9 @@ class PrefetchRelatedTests(TestCase):
         # Need a double
         with self.assertNumQueries(3):
             author = Author.objects.prefetch_related('books__read_by').get(name="Charlotte")
-            lists = [[unicode(r) for r in b.read_by.all()]
+            lists = [[six.text_type(r) for r in b.read_by.all()]
                       for b in author.books.all()]
-            self.assertEqual(lists, [[u"Amy"], [u"Belinda"]])  # Poems, Jane Eyre
+            self.assertEqual(lists, [["Amy"], ["Belinda"]])  # Poems, Jane Eyre
 
     def test_foreign_key_then_m2m(self):
         """
@@ -167,12 +176,12 @@ class PrefetchRelatedTests(TestCase):
         """
         with self.assertNumQueries(2):
             qs = Author.objects.select_related('first_book').prefetch_related('first_book__read_by')
-            lists = [[unicode(r) for r in a.first_book.read_by.all()]
+            lists = [[six.text_type(r) for r in a.first_book.read_by.all()]
                      for a in qs]
-            self.assertEqual(lists, [[u"Amy"],
-                                     [u"Amy"],
-                                     [u"Amy"],
-                                     [u"Amy", "Belinda"]])
+            self.assertEqual(lists, [["Amy"],
+                                     ["Amy"],
+                                     ["Amy"],
+                                     ["Amy", "Belinda"]])
 
     def test_attribute_error(self):
         qs = Reader.objects.all().prefetch_related('books_read__xyz')
@@ -219,7 +228,7 @@ class DefaultManagerTests(TestCase):
             # qualifications, since this will do one query per teacher.
             qs = Department.objects.prefetch_related('teachers')
             depts = "".join(["%s department: %s\n" %
-                             (dept.name, ", ".join(unicode(t) for t in dept.teachers.all()))
+                             (dept.name, ", ".join(six.text_type(t) for t in dept.teachers.all()))
                              for dept in qs])
 
             self.assertEqual(depts,
@@ -310,6 +319,16 @@ class GenericRelationTests(TestCase):
                     for t in b.tags.all()]
             self.assertEqual(sorted(tags), ["django", "python"])
 
+    def test_charfield_GFK(self):
+        b = Bookmark.objects.create(url='http://www.djangoproject.com/')
+        t1 = TaggedItem.objects.create(content_object=b, tag='django')
+        t2 = TaggedItem.objects.create(content_object=b, favorite=b, tag='python')
+
+        with self.assertNumQueries(3):
+            bookmark = Bookmark.objects.filter(pk=b.pk).prefetch_related('tags', 'favorite_tags')[0]
+            self.assertEqual(sorted([i.tag for i in bookmark.tags.all()]), ["django", "python"])
+            self.assertEqual([i.tag for i in bookmark.favorite_tags.all()], ["python"])
+
 
 class MultiTableInheritanceTest(TestCase):
 
@@ -327,32 +346,42 @@ class MultiTableInheritanceTest(TestCase):
         self.authorAddress = AuthorAddress.objects.create(
             author=self.author1, address='SomeStreet 1')
         self.book2.aged_authors.add(self.author2, self.author3)
+        self.br1 = BookReview.objects.create(
+            book=self.book1, notes="review book1")
+        self.br2 = BookReview.objects.create(
+            book=self.book2, notes="review book2")
 
     def test_foreignkey(self):
         with self.assertNumQueries(2):
             qs = AuthorWithAge.objects.prefetch_related('addresses')
-            addresses = [[unicode(address) for address in obj.addresses.all()]
+            addresses = [[six.text_type(address) for address in obj.addresses.all()]
                          for obj in qs]
-        self.assertEquals(addresses, [[unicode(self.authorAddress)], [], []])
+        self.assertEqual(addresses, [[six.text_type(self.authorAddress)], [], []])
+
+    def test_foreignkey_to_inherited(self):
+        with self.assertNumQueries(2):
+            qs = BookReview.objects.prefetch_related('book')
+            titles = [obj.book.title for obj in qs]
+        self.assertEqual(titles, ["Poems", "More poems"])
 
     def test_m2m_to_inheriting_model(self):
         qs = AuthorWithAge.objects.prefetch_related('books_with_year')
         with self.assertNumQueries(2):
-            lst = [[unicode(book) for book in author.books_with_year.all()]
+            lst = [[six.text_type(book) for book in author.books_with_year.all()]
                    for author in qs]
         qs = AuthorWithAge.objects.all()
-        lst2 = [[unicode(book) for book in author.books_with_year.all()]
+        lst2 = [[six.text_type(book) for book in author.books_with_year.all()]
                 for author in qs]
-        self.assertEquals(lst, lst2)
+        self.assertEqual(lst, lst2)
 
         qs = BookWithYear.objects.prefetch_related('aged_authors')
         with self.assertNumQueries(2):
-            lst = [[unicode(author) for author in book.aged_authors.all()]
+            lst = [[six.text_type(author) for author in book.aged_authors.all()]
                    for book in qs]
         qs = BookWithYear.objects.all()
-        lst2 = [[unicode(author) for author in book.aged_authors.all()]
+        lst2 = [[six.text_type(author) for author in book.aged_authors.all()]
                for book in qs]
-        self.assertEquals(lst, lst2)
+        self.assertEqual(lst, lst2)
 
     def test_parent_link_prefetch(self):
         with self.assertNumQueries(2):
@@ -364,7 +393,9 @@ class MultiTableInheritanceTest(TestCase):
             l = [a.authorwithage for a in Author.objects.prefetch_related('authorwithage')]
 
         # Regression for #18090: the prefetching query must include an IN clause.
-        self.assertIn('authorwithage', connection.queries[-1]['sql'])
+        # Note that on Oracle the table name is upper case in the generated SQL,
+        # thus the .lower() call.
+        self.assertIn('authorwithage', connection.queries[-1]['sql'].lower())
         self.assertIn(' IN ', connection.queries[-1]['sql'])
 
         self.assertEqual(l, [a.authorwithage for a in Author.objects.all()])
@@ -390,23 +421,23 @@ class ForeignKeyToFieldTest(TestCase):
     def test_foreignkey(self):
         with self.assertNumQueries(2):
             qs = Author.objects.prefetch_related('addresses')
-            addresses = [[unicode(address) for address in obj.addresses.all()]
+            addresses = [[six.text_type(address) for address in obj.addresses.all()]
                          for obj in qs]
-        self.assertEquals(addresses, [[unicode(self.authorAddress)], [], []])
+        self.assertEqual(addresses, [[six.text_type(self.authorAddress)], [], []])
 
     def test_m2m(self):
         with self.assertNumQueries(3):
             qs = Author.objects.all().prefetch_related('favorite_authors', 'favors_me')
             favorites = [(
-                 [unicode(i_like) for i_like in author.favorite_authors.all()],
-                 [unicode(likes_me) for likes_me in author.favors_me.all()]
+                 [six.text_type(i_like) for i_like in author.favorite_authors.all()],
+                 [six.text_type(likes_me) for likes_me in author.favors_me.all()]
                 ) for author in qs]
-            self.assertEquals(
+            self.assertEqual(
                 favorites,
                 [
-                    ([unicode(self.author2)],[unicode(self.author3)]),
-                    ([unicode(self.author3)],[unicode(self.author1)]),
-                    ([unicode(self.author1)],[unicode(self.author2)])
+                    ([six.text_type(self.author2)],[six.text_type(self.author3)]),
+                    ([six.text_type(self.author3)],[six.text_type(self.author1)]),
+                    ([six.text_type(self.author1)],[six.text_type(self.author2)])
                 ]
             )
 
@@ -539,7 +570,7 @@ class MultiDbTests(TestCase):
             authors = "".join(["%s: %s\n" %
                                (author.name, ", ".join(b.title for b in author.books.all()))
                                for author in qs2])
-        self.assertEquals(authors,
+        self.assertEqual(authors,
                           "Charlotte: Poems, Jane Eyre\n"
                           "Anne: Poems\n"
                           "Emily: Poems, Wuthering Heights\n"

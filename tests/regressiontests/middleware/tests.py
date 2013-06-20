@@ -1,20 +1,29 @@
 # -*- coding: utf-8 -*-
+from __future__ import absolute_import, unicode_literals
 
 import gzip
 import re
 import random
-import StringIO
+from io import BytesIO
 
 from django.conf import settings
 from django.core import mail
-from django.http import HttpRequest
-from django.http import HttpResponse
+from django.db import (transaction, connections, DEFAULT_DB_ALIAS,
+                       IntegrityError)
+from django.http import HttpRequest, HttpResponse, StreamingHttpResponse
 from django.middleware.clickjacking import XFrameOptionsMiddleware
 from django.middleware.common import CommonMiddleware
 from django.middleware.http import ConditionalGetMiddleware
 from django.middleware.gzip import GZipMiddleware
-from django.test import TestCase, RequestFactory
+from django.middleware.transaction import TransactionMiddleware
+from django.test import TransactionTestCase, TestCase, RequestFactory
 from django.test.utils import override_settings
+from django.utils import six
+from django.utils.encoding import force_str
+from django.utils.six.moves import xrange
+
+from .models import Band
+
 
 class CommonMiddlewareTest(TestCase):
     def setUp(self):
@@ -88,7 +97,7 @@ class CommonMiddlewareTest(TestCase):
             request)
         try:
             CommonMiddleware().process_request(request)
-        except RuntimeError, e:
+        except RuntimeError as e:
             self.assertTrue('end in a slash' in str(e))
         settings.DEBUG = False
 
@@ -202,7 +211,7 @@ class CommonMiddlewareTest(TestCase):
           request)
       try:
           CommonMiddleware().process_request(request)
-      except RuntimeError, e:
+      except RuntimeError as e:
           self.assertTrue('end in a slash' in str(e))
       settings.DEBUG = False
 
@@ -291,6 +300,15 @@ class CommonMiddlewareTest(TestCase):
         CommonMiddleware().process_response(request, response)
         self.assertEqual(len(mail.outbox), 0)
 
+    # Other tests
+
+    def test_non_ascii_query_string_does_not_crash(self):
+        """Regression test for #15152"""
+        request = self._get_request('slash')
+        request.META['QUERY_STRING'] = force_str('drink=café')
+        response = CommonMiddleware().process_request(request)
+        self.assertEqual(response.status_code, 301)
+
 
 class ConditionalGetMiddlewareTest(TestCase):
     urls = 'regressiontests.middleware.cond_get_urls'
@@ -318,6 +336,12 @@ class ConditionalGetMiddlewareTest(TestCase):
         self.resp = ConditionalGetMiddleware().process_response(self.req, self.resp)
         self.assertTrue('Content-Length' in self.resp)
         self.assertEqual(int(self.resp['Content-Length']), content_length)
+
+    def test_content_length_header_not_added(self):
+        resp = StreamingHttpResponse('content')
+        self.assertFalse('Content-Length' in resp)
+        resp = ConditionalGetMiddleware().process_response(self.req, resp)
+        self.assertFalse('Content-Length' in resp)
 
     def test_content_length_header_not_changed(self):
         bad_content_length = len(self.resp.content) + 10
@@ -347,6 +371,29 @@ class ConditionalGetMiddlewareTest(TestCase):
         self.resp['ETag'] = 'eggs'
         self.resp = ConditionalGetMiddleware().process_response(self.req, self.resp)
         self.assertEqual(self.resp.status_code, 200)
+
+    @override_settings(USE_ETAGS=True)
+    def test_etag(self):
+        req = HttpRequest()
+        res = HttpResponse('content')
+        self.assertTrue(
+            CommonMiddleware().process_response(req, res).has_header('ETag'))
+
+    @override_settings(USE_ETAGS=True)
+    def test_etag_streaming_response(self):
+        req = HttpRequest()
+        res = StreamingHttpResponse(['content'])
+        res['ETag'] = 'tomatoes'
+        self.assertEqual(
+            CommonMiddleware().process_response(req, res).get('ETag'),
+            'tomatoes')
+
+    @override_settings(USE_ETAGS=True)
+    def test_no_etag_streaming_response(self):
+        req = HttpRequest()
+        res = StreamingHttpResponse(['content'])
+        self.assertFalse(
+            CommonMiddleware().process_response(req, res).has_header('ETag'))
 
     # Tests for the Last-Modified header
 
@@ -505,9 +552,10 @@ class GZipMiddlewareTest(TestCase):
     """
     Tests the GZip middleware.
     """
-    short_string = "This string is too short to be worth compressing."
-    compressible_string = 'a' * 500
-    uncompressible_string = ''.join(chr(random.randint(0, 255)) for _ in xrange(500))
+    short_string = b"This string is too short to be worth compressing."
+    compressible_string = b'a' * 500
+    uncompressible_string = b''.join(six.int2byte(random.randint(0, 255)) for _ in xrange(500))
+    sequence = [b'a' * 500, b'b' * 200, b'a' * 300]
 
     def setUp(self):
         self.req = HttpRequest()
@@ -522,10 +570,12 @@ class GZipMiddlewareTest(TestCase):
         self.resp.status_code = 200
         self.resp.content = self.compressible_string
         self.resp['Content-Type'] = 'text/html; charset=UTF-8'
+        self.stream_resp = StreamingHttpResponse(self.sequence)
+        self.stream_resp['Content-Type'] = 'text/html; charset=UTF-8'
 
     @staticmethod
     def decompress(gzipped_string):
-        return gzip.GzipFile(mode='rb', fileobj=StringIO.StringIO(gzipped_string)).read()
+        return gzip.GzipFile(mode='rb', fileobj=BytesIO(gzipped_string)).read()
 
     def test_compress_response(self):
         """
@@ -535,6 +585,15 @@ class GZipMiddlewareTest(TestCase):
         self.assertEqual(self.decompress(r.content), self.compressible_string)
         self.assertEqual(r.get('Content-Encoding'), 'gzip')
         self.assertEqual(r.get('Content-Length'), str(len(r.content)))
+
+    def test_compress_streaming_response(self):
+        """
+        Tests that compression is performed on responses with streaming content.
+        """
+        r = GZipMiddleware().process_response(self.req, self.stream_resp)
+        self.assertEqual(self.decompress(b''.join(r)), b''.join(self.sequence))
+        self.assertEqual(r.get('Content-Encoding'), 'gzip')
+        self.assertFalse(r.has_header('Content-Length'))
 
     def test_compress_non_200_response(self):
         """
@@ -584,11 +643,12 @@ class GZipMiddlewareTest(TestCase):
         self.assertEqual(r.get('Content-Encoding'), None)
 
 
+@override_settings(USE_ETAGS=True)
 class ETagGZipMiddlewareTest(TestCase):
     """
     Tests if the ETag middleware behaves correctly with GZip middleware.
     """
-    compressible_string = 'a' * 500
+    compressible_string = b'a' * 500
 
     def setUp(self):
         self.rf = RequestFactory()
@@ -610,6 +670,64 @@ class ETagGZipMiddlewareTest(TestCase):
         nogzip_etag = response.get('ETag')
 
         self.assertNotEqual(gzip_etag, nogzip_etag)
-ETagGZipMiddlewareTest = override_settings(
-    USE_ETAGS=True,
-)(ETagGZipMiddlewareTest)
+
+class TransactionMiddlewareTest(TransactionTestCase):
+    """
+    Test the transaction middleware.
+    """
+    def setUp(self):
+        self.request = HttpRequest()
+        self.request.META = {
+            'SERVER_NAME': 'testserver',
+            'SERVER_PORT': 80,
+        }
+        self.request.path = self.request.path_info = "/"
+        self.response = HttpResponse()
+        self.response.status_code = 200
+
+    def test_request(self):
+        TransactionMiddleware().process_request(self.request)
+        self.assertTrue(transaction.is_managed())
+
+    def test_managed_response(self):
+        transaction.enter_transaction_management()
+        transaction.managed(True)
+        Band.objects.create(name='The Beatles')
+        self.assertTrue(transaction.is_dirty())
+        TransactionMiddleware().process_response(self.request, self.response)
+        self.assertFalse(transaction.is_dirty())
+        self.assertEqual(Band.objects.count(), 1)
+
+    def test_unmanaged_response(self):
+        transaction.managed(False)
+        TransactionMiddleware().process_response(self.request, self.response)
+        self.assertFalse(transaction.is_managed())
+        self.assertFalse(transaction.is_dirty())
+
+    def test_exception(self):
+        transaction.enter_transaction_management()
+        transaction.managed(True)
+        Band.objects.create(name='The Beatles')
+        self.assertTrue(transaction.is_dirty())
+        TransactionMiddleware().process_exception(self.request, None)
+        self.assertEqual(Band.objects.count(), 0)
+        self.assertFalse(transaction.is_dirty())
+
+    def test_failing_commit(self):
+        # It is possible that connection.commit() fails. Check that
+        # TransactionMiddleware handles such cases correctly.
+        try:
+            def raise_exception():
+                raise IntegrityError()
+            connections[DEFAULT_DB_ALIAS].commit = raise_exception
+            transaction.enter_transaction_management()
+            transaction.managed(True)
+            Band.objects.create(name='The Beatles')
+            self.assertTrue(transaction.is_dirty())
+            with self.assertRaises(IntegrityError):
+                TransactionMiddleware().process_response(self.request, None)
+            self.assertEqual(Band.objects.count(), 0)
+            self.assertFalse(transaction.is_dirty())
+            self.assertFalse(transaction.is_managed())
+        finally:
+            del connections[DEFAULT_DB_ALIAS].commit

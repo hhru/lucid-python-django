@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+from __future__ import absolute_import, unicode_literals
 
 import re
 
@@ -54,7 +54,7 @@ class CommentViewTests(CommentTestCase):
         a = Article.objects.get(pk=1)
         data = self.getValidData(a)
         data["comment"] = "This is another comment"
-        data["object_pk"] = u'\ufffd'
+        data["object_pk"] = '\ufffd'
         response = self.client.post("/post/", data)
         self.assertEqual(response.status_code, 400)
 
@@ -222,6 +222,13 @@ class CommentViewTests(CommentTestCase):
         match = re.search(r"^http://testserver/somewhere/else/\?c=\d+$", location)
         self.assertTrue(match != None, "Unexpected redirect location: %s" % location)
 
+        data["next"] = "http://badserver/somewhere/else/"
+        data["comment"] = "This is another comment with an unsafe next url"
+        response = self.client.post("/post/", data)
+        location = response["Location"]
+        match = post_redirect_re.match(location)
+        self.assertTrue(match != None, "Unsafe redirection to: %s" % location)
+
     def testCommentDoneView(self):
         a = Article.objects.get(pk=1)
         data = self.getValidData(a)
@@ -258,7 +265,7 @@ class CommentViewTests(CommentTestCase):
         data["comment"] = "This is another comment"
         response = self.client.post("/post/", data)
         location = response["Location"]
-        broken_location = location + u"\ufffd"
+        broken_location = location + "\ufffd"
         response = self.client.get(broken_location)
         self.assertEqual(response.status_code, 200)
 

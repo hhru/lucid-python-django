@@ -1,3 +1,9 @@
+python-django (1.5.1) unstable; urgency=low
+
+  * Update to 1.5.1
+
+ -- Anton Volozhanin <zzzombat@gmail.com>  Tue, 20 June 2013 18:18:50 +0400
+
 python-django (1.4.1) unstable; urgency=low
 
   * Update to 1.4.1
