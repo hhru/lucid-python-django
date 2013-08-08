@@ -1,4 +1,10 @@
-python-django (1.5.1) unstable; urgency=low
+python-django (1.5.1+hh1) reestr-stable; urgency=low
+
+  * 1.5_fix_disconnect_error fix disconnection database error
+
+ -- Andrey Knyazev <knevcher@gmail.com>  Thu, 08 Aug 2013 16:26:13 +0400
+
+python-django (1.5.1) reestr-stable; urgency=low
 
   * Update to 1.5.1
 

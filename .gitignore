@@ -1,0 +1,59 @@
+*.py[co]
+*.log
+
+# Packages
+*.egg
+*.egg-info
+dist
+build
+eggs
+parts
+bin
+var
+sdist
+develop-eggs
+.installed.cfg
+
+# Debian temporary
+*.debhelper
+*.debhelper.log
+*.substvars
+debian/*/*
+debian/files
+
+# Installer logs
+pip-log.txt
+
+# Unit test / coverage reports
+.coverage
+.tox
+
+#Translations
+*.mo
+
+#Mr Developer
+.mr.developer.cfg
+sample_data_generator.py
+
+# Eclipse
+.project
+.pydevproject
+.settings
+
+.jar
+
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Vim
+*.swp
+
+.ropeproject
+/media/*
+
+# Settings overrides
+hhagencyreestr/settings_override.py
+/.dir-locals.el
