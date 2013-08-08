@@ -242,17 +242,20 @@ class WSGIHandler(base.BaseHandler):
         set_script_prefix(base.get_script_name(environ))
         signals.request_started.send(sender=self.__class__)
         try:
-            request = self.request_class(environ)
-        except UnicodeDecodeError:
-            logger.warning('Bad Request (UnicodeDecodeError)',
-                exc_info=sys.exc_info(),
-                extra={
-                    'status_code': 400,
-                }
-            )
-            response = http.HttpResponseBadRequest()
-        else:
-            response = self.get_response(request)
+            try:
+                request = self.request_class(environ)
+            except UnicodeDecodeError:
+                logger.warning('Bad Request (UnicodeDecodeError)',
+                    exc_info=sys.exc_info(),
+                    extra={
+                        'status_code': 400,
+                    }
+                )
+                response = http.HttpResponseBadRequest()
+            else:
+                response = self.get_response(request)
+        finally:
+            signals.request_finished.send(sender=self.__class__)
 
         response._handler_class = self.__class__
 
