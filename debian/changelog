@@ -1,3 +1,9 @@
+python-django (1.5.1+hh2) hh-cf-stable; urgency=low
+
+  * minor version update
+
+ -- Andrey Knyazev <knevcher@gmail.com>  Tue, 27 Aug 2013 14:46:26 +0400
+
 python-django (1.5.1+hh1) reestr-stable; urgency=low
 
   * 1.5_fix_disconnect_error fix disconnection database error
