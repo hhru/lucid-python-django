@@ -1,4 +1,10 @@
-python-django (1.5.1+hh2) hh-cf-stable; urgency=low
+python-django (1.5.1+hh3) cf-stable; urgency=low
+
+  * minor version update
+
+ -- Andrey Knyazev <knevcher@gmail.com>  Tue, 27 Aug 2013 17:10:26 +0400
+
+python-django (1.5.1+hh2) cf-stable; urgency=low
 
   * minor version update
 
