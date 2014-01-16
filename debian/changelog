@@ -1,3 +1,9 @@
+python-django (1.6.2) unstable; urgency=low
+
+  * Update to 1.6.2
+
+ -- Andrey Terenkov <andrey.terenkov@gmail.com>  Thu, 16 Jan 2014 12:01:03 +0400
+
 python-django (1.5.1+hh4) expo-stable; urgency=low
 
   * minor version update

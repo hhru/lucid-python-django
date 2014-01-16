@@ -138,8 +138,6 @@ results. Instead do::
 ``django.utils.dateparse``
 ==========================
 
-.. versionadded:: 1.4
-
 .. module:: django.utils.dateparse
    :synopsis: Functions to parse datetime objects.
 
@@ -441,13 +439,71 @@ Atom1Feed
 
 .. class:: Atom1Feed(SyndicationFeed)
 
-    Spec: http://www.atomenabled.org/developers/syndication/atom-format-spec.php
+    Spec: http://tools.ietf.org/html/rfc4287
 
 ``django.utils.functional``
 ===========================
 
 .. module:: django.utils.functional
     :synopsis: Functional programming tools.
+
+.. class:: cached_property(object)
+
+    The ``@cached_property`` decorator caches the result of a method with a
+    single ``self`` argument as a property. The cached result will persist
+    as long as the instance does, so if the instance is passed around and the
+    function subsequently invoked, the cached result will be returned.
+
+    Consider a typical case, where a view might need to call a model's method
+    to perform some computation, before placing the model instance into the
+    context, where the template might invoke the method once more::
+
+        # the model
+        class Person(models.Model):
+
+            def friends(self):
+                # expensive computation
+                ...
+                return friends
+
+        # in the view:
+        if person.friends():
+
+        # in the template:
+        {% for friend in person.friends %}
+
+    Here, ``friends()`` will be called twice. Since the instance ``person`` in
+    the view and the template are the same, ``@cached_property`` can avoid
+    that::
+
+        from django.utils.functional import cached_property
+
+        @cached_property
+        def friends(self):
+            # expensive computation
+            ...
+            return friends
+
+    Note that as the method is now a property, in Python code it will need to
+    be invoked appropriately::
+
+        # in the view:
+        if person.friends:
+
+    The cached value can be treated like an ordinary attribute of the instance::
+
+        # clear it, requiring re-computation next time it's called
+        del person.friends # or delattr(person, "friends")
+
+        # set a value manually, that will persist on the instance until cleared
+        person.friends = ["Huckleberry Finn", "Tom Sawyer"]
+
+    As well as offering potential performance advantages, ``@cached_property``
+    can ensure that an attribute's value does not change unexpectedly over the
+    life of an instance. This could occur with a method whose computation is
+    based on ``datetime.now()``, or simply if a change were saved to the
+    database by some other process in the brief interval between subsequent
+    invocations of a method on the same instance.
 
 .. function:: allow_lazy(func, *resultclasses)
 
@@ -473,12 +529,14 @@ Atom1Feed
         def fancy_utility_function(s, ...):
             # Do some conversion on string 's'
             ...
+        # Replace unicode by str on Python 3
         fancy_utility_function = allow_lazy(fancy_utility_function, unicode)
 
     The ``allow_lazy()`` decorator takes, in addition to the function to decorate,
     a number of extra arguments (``*args``) specifying the type(s) that the
-    original function can return. Usually, it's enough to include ``unicode`` here
-    and ensure that your function returns only Unicode strings.
+    original function can return. Usually, it's enough to include ``unicode``
+    (or ``str`` on Python 3) here and ensure that your function returns only
+    Unicode strings.
 
     Using this decorator means you can write your function and assume that the
     input is a proper string, then add support for lazy translation objects at the
@@ -492,7 +550,7 @@ Atom1Feed
 
 Usually you should build up HTML using Django's templates to make use of its
 autoescape mechanism, using the utilities in :mod:`django.utils.safestring`
-where appropriate. This module provides some additional low level utilitiesfor
+where appropriate. This module provides some additional low level utilities for
 escaping HTML.
 
 .. function:: escape(text)
@@ -531,7 +589,7 @@ escaping HTML.
 
     .. code-block:: python
 
-        format_html(u"%{0} <b>{1}</b> {2}",
+        format_html(u"{0} <b>{1}</b> {2}",
                     mark_safe(some_html), some_text, some_other_text)
 
     This has the advantage that you don't need to apply :func:`escape` to each
@@ -566,15 +624,21 @@ escaping HTML.
         strip_tags(value)
 
     If ``value`` is ``"<b>Joel</b> <button>is</button> a <span>slug</span>"`` the
-    return value will be ``"Joel is a slug"``.
+    return value will be ``"Joel is a slug"``. Note that ``strip_tags`` result
+    may still contain unsafe HTML content, so you might use
+    :func:`~django.utils.html.escape` to make it a safe string.
+
+    .. versionchanged:: 1.6
+
+        For improved safety, ``strip_tags`` is now parser-based.
 
 .. function:: remove_tags(value, tags)
 
-    Removes a list of [X]HTML tag names from the output.
+    Removes a space-separated list of [X]HTML tag names from the output.
 
     For example::
 
-        remove_tags(value, ["b", "span"])
+        remove_tags(value, "b span")
 
     If ``value`` is ``"<b>Joel</b> <button>is</button> a <span>slug</span>"`` the
     return value will be ``"Joel <button>is</button> a slug"``.
@@ -645,6 +709,44 @@ escaping HTML.
     Converts a positive integer to a base 36 string. On Python 2 ``i`` must be
     smaller than :data:`sys.maxint`.
 
+.. function:: urlsafe_base64_encode(s)
+
+    .. versionadded:: 1.6
+
+    Encodes a bytestring in base64 for use in URLs, stripping any trailing
+    equal signs.
+
+.. function::  urlsafe_base64_decode(s)
+
+    .. versionadded:: 1.6
+
+    Decodes a base64 encoded string, adding back any trailing equal signs that
+    might have been stripped.
+
+``django.utils.module_loading``
+===============================
+
+.. module:: django.utils.module_loading
+   :synopsis: Functions for working with Python modules.
+
+Functions for working with Python modules.
+
+.. function:: import_by_path(dotted_path, error_prefix='')
+
+    .. versionadded:: 1.6
+
+    Imports a dotted module path and returns the attribute/class designated by
+    the last name in the path. Raises
+    :exc:`~django.core.exceptions.ImproperlyConfigured` if something goes
+    wrong. For example::
+
+        from django.utils.module_loading import import_by_path
+        ImproperlyConfigured = import_by_path('django.core.exceptions.ImproperlyConfigured')
+
+    is equivalent to::
+
+        from django.core.exceptions import ImproperlyConfigured
+
 ``django.utils.safestring``
 ===========================
 
@@ -687,6 +789,17 @@ appropriate entities.
     object can be used everywhere a string or unicode object is appropriate.
 
     Can be called multiple times on a single string.
+
+    String marked safe will become unsafe again if modified. For example::
+
+        >>> mystr = '<b>Hello World</b>   '
+        >>> mystr = mark_safe(mystr)
+        >>> type(mystr)
+        <class 'django.utils.safestring.SafeBytes'>
+
+        >>> mystr = mystr.strip()  # removing whitespace
+        >>> type(mystr)
+        <type 'str'>
 
 .. function:: mark_for_escaping(s)
 
@@ -771,7 +884,7 @@ For a complete discussion on the usage of the following see the
 
 .. function:: ngettext_lazy(singular, plural, number)
 .. function:: ungettext_lazy(singular, plural, number)
-.. function:: npgettext_lazy(singular, plural, number)
+.. function:: npgettext_lazy(context, singular, plural, number)
 
     Same as the non-lazy versions above, but using lazy execution.
 
@@ -800,8 +913,6 @@ For a complete discussion on the usage of the following see the
 
 .. function:: override(language, deactivate=False)
 
-    .. versionadded:: 1.4
-
     A Python context manager that uses
     :func:`django.utils.translation.activate` to fetch the translation object
     for a given language, installing it as the translation object for the
@@ -823,8 +934,6 @@ For a complete discussion on the usage of the following see the
     * ``True`` = right-to-left layout
 
 .. function:: get_language_from_request(request, check_path=False)
-
-    .. versionchanged:: 1.4
 
     Analyzes the request to find what language the user wants the system to show.
     Only languages listed in settings.LANGUAGES are taken into account. If the user
@@ -849,8 +958,6 @@ For a complete discussion on the usage of the following see the
 
 ``django.utils.timezone``
 =========================
-
-.. versionadded:: 1.4
 
 .. module:: django.utils.timezone
     :synopsis: Timezone support.
@@ -909,9 +1016,21 @@ For a complete discussion on the usage of the following see the
 
 .. function:: now()
 
-    Returns an aware or naive :class:`~datetime.datetime` that represents the
-    current point in time when :setting:`USE_TZ` is ``True`` or ``False``
-    respectively.
+    Returns a :class:`~datetime.datetime` that represents the
+    current point in time. Exactly what's returned depends on the value of
+    :setting:`USE_TZ`:
+
+    * If :setting:`USE_TZ` is ``False``, this will be be a
+      :ref:`naive <naive_vs_aware_datetimes>` datetime (i.e. a datetime
+      without an associated timezone) that represents the current time
+      in the system's local timezone.
+
+    * If :setting:`USE_TZ` is ``True``, this will be an
+      :ref:`aware <naive_vs_aware_datetimes>` datetime representing the
+      current time in UTC. Note that :func:`now` will always return
+      times in UTC regardless of the value of :setting:`TIME_ZONE`;
+      you can use :func:`localtime` to convert to a time in the current
+      time zone.
 
 .. function:: is_aware(value)
 

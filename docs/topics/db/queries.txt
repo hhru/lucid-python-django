@@ -17,10 +17,13 @@ models, which comprise a Weblog application:
 
 .. code-block:: python
 
+    from django.db import models
+
     class Blog(models.Model):
         name = models.CharField(max_length=100)
         tagline = models.TextField()
 
+        # On Python 3: def __str__(self):
         def __unicode__(self):
             return self.name
 
@@ -28,6 +31,7 @@ models, which comprise a Weblog application:
         name = models.CharField(max_length=50)
         email = models.EmailField()
 
+        # On Python 3: def __str__(self):
         def __unicode__(self):
             return self.name
 
@@ -42,6 +46,7 @@ models, which comprise a Weblog application:
         n_pingbacks = models.IntegerField()
         rating = models.IntegerField()
 
+        # On Python 3: def __str__(self):
         def __unicode__(self):
             return self.headline
 
@@ -100,7 +105,8 @@ Saving ``ForeignKey`` and ``ManyToManyField`` fields
 Updating a :class:`~django.db.models.ForeignKey` field works exactly the same
 way as saving a normal field -- simply assign an object of the right type to
 the field in question. This example updates the ``blog`` attribute of an
-``Entry`` instance ``entry``::
+``Entry`` instance ``entry``, assuming appropriate instances of ``Entry`` and
+``Blog`` are already saved to the database (so we can retrieve them below)::
 
     >>> from blog.models import Entry
     >>> entry = Entry.objects.get(pk=1)
@@ -138,8 +144,8 @@ To retrieve objects from your database, construct a
 :class:`~django.db.models.Manager` on your model class.
 
 A :class:`~django.db.models.query.QuerySet` represents a collection of objects
-from your database. It can have zero, one or many *filters* -- criteria that
-narrow down the collection based on given parameters. In SQL terms, a
+from your database. It can have zero, one or many *filters*. Filters narrow
+down the query results based on the given parameters. In SQL terms, a
 :class:`~django.db.models.query.QuerySet` equates to a ``SELECT`` statement,
 and a filter is a limiting clause such as ``WHERE`` or ``LIMIT``.
 
@@ -255,10 +261,10 @@ Example::
 These three ``QuerySets`` are separate. The first is a base
 :class:`~django.db.models.query.QuerySet` containing all entries that contain a
 headline starting with "What". The second is a subset of the first, with an
-additional criteria that excludes records whose ``pub_date`` is greater than
-now. The third is a subset of the first, with an additional criteria that
-selects only the records whose ``pub_date`` is greater than now. The initial
-:class:`~django.db.models.query.QuerySet` (``q1``) is unaffected by the
+additional criteria that excludes records whose ``pub_date`` is today or in the
+future. The third is a subset of the first, with an additional criteria that
+selects only the records whose ``pub_date`` is today or in the future. The
+initial :class:`~django.db.models.query.QuerySet` (``q1``) is unaffected by the
 refinement process.
 
 .. _querysets-are-lazy:
@@ -403,14 +409,13 @@ translates (roughly) into the following SQL::
 
    .. _`Keyword Arguments`: http://docs.python.org/tutorial/controlflow.html#keyword-arguments
 
-.. versionchanged:: 1.4
-    The field specified in a lookup has to be the name of a model field.
-    There's one exception though, in case of a
-    :class:`~django.db.models.ForeignKey` you can specify the field
-    name suffixed with ``_id``. In this case, the value parameter is expected
-    to contain the raw value of the foreign model's primary key. For example:
+The field specified in a lookup has to be the name of a model field. There's
+one exception though, in case of a :class:`~django.db.models.ForeignKey` you
+can specify the field name suffixed with ``_id``. In this case, the value
+parameter is expected to contain the raw value of the foreign model's primary
+key. For example:
 
-        >>> Entry.objects.filter(blog_id__exact=4)
+    >>> Entry.objects.filter(blog_id__exact=4)
 
 If you pass an invalid keyword argument, a lookup function will raise
 ``TypeError``.
@@ -639,6 +644,7 @@ that were modified more than 3 days after they were published::
     >>> Entry.objects.filter(mod_date__gt=F('pub_date') + timedelta(days=3))
 
 .. versionadded:: 1.5
+
     ``.bitand()`` and ``.bitor()``
 
 The ``F()`` objects now support bitwise operations by ``.bitand()`` and
@@ -647,6 +653,7 @@ The ``F()`` objects now support bitwise operations by ``.bitand()`` and
     >>> F('somefield').bitand(16)
 
 .. versionchanged:: 1.5
+
     The previously undocumented operators ``&`` and ``|`` no longer produce
     bitwise operations, use ``.bitand()`` and ``.bitor()`` instead.
 
@@ -710,14 +717,14 @@ for you transparently.
 Caching and QuerySets
 ---------------------
 
-Each :class:`~django.db.models.query.QuerySet` contains a cache, to minimize
-database access. It's important to understand how it works, in order to write
-the most efficient code.
+Each :class:`~django.db.models.query.QuerySet` contains a cache to minimize
+database access. Understanding how it works will allow you to write the most
+efficient code.
 
 In a newly created :class:`~django.db.models.query.QuerySet`, the cache is
 empty. The first time a :class:`~django.db.models.query.QuerySet` is evaluated
 -- and, hence, a database query happens -- Django saves the query results in
-the :class:`~django.db.models.query.QuerySet`\'s cache and returns the results
+the :class:`~django.db.models.query.QuerySet`’s cache and returns the results
 that have been explicitly requested (e.g., the next element, if the
 :class:`~django.db.models.query.QuerySet` is being iterated over). Subsequent
 evaluations of the :class:`~django.db.models.query.QuerySet` reuse the cached
@@ -742,6 +749,43 @@ To avoid this problem, simply save the
     >>> queryset = Entry.objects.all()
     >>> print([p.headline for p in queryset]) # Evaluate the query set.
     >>> print([p.pub_date for p in queryset]) # Re-use the cache from the evaluation.
+
+When querysets are not cached
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Querysets do not always cache their results.  When evaluating only *part* of
+the queryset, the cache is checked, but if it is not populated then the items
+returned by the subsequent query are not cached. Specifically, this means that
+:ref:`limiting the queryset <limiting-querysets>` using an array slice or an
+index will not populate the cache.
+
+For example, repeatedly getting a certain index in a queryset object will query
+the database each time::
+
+    >>> queryset = Entry.objects.all()
+    >>> print queryset[5] # Queries the database
+    >>> print queryset[5] # Queries the database again
+
+However, if the entire queryset has already been evaluated, the cache will be
+checked instead::
+
+    >>> queryset = Entry.objects.all()
+    >>> [entry for entry in queryset] # Queries the database
+    >>> print queryset[5] # Uses cache
+    >>> print queryset[5] # Uses cache
+
+Here are some examples of other actions that will result in the entire queryset
+being evaluated and therefore populate the cache::
+
+    >>> [entry for entry in queryset]
+    >>> bool(queryset)
+    >>> entry in queryset
+    >>> list(queryset)
+
+.. note::
+
+    Simply printing the queryset will not populate the cache. This is because
+    the call to ``__repr__()`` only returns a slice of the entire queryset.
 
 .. _complex-lookups-with-q:
 
@@ -1054,8 +1098,9 @@ the foreign key aren't saved to the database until you call
     >>> e.blog = some_blog
     >>> e.save()
 
-If a :class:`~django.db.models.ForeignKey` field has ``null=True`` set (i.e., it allows ``NULL``
-values), you can assign ``None`` to it. Example::
+If a :class:`~django.db.models.ForeignKey` field has ``null=True`` set (i.e.,
+it allows ``NULL`` values), you can assign ``None`` to remove the relation.
+Example::
 
     >>> e = Entry.objects.get(id=2)
     >>> e.blog = None
@@ -1099,8 +1144,9 @@ Example::
     >>> b.entry_set.filter(headline__contains='Lennon')
     >>> b.entry_set.count()
 
-You can override the ``FOO_set`` name by setting the ``related_name``
-parameter in the ``ForeignKey()`` definition. For example, if the ``Entry``
+You can override the ``FOO_set`` name by setting the
+:attr:`~django.db.models.ForeignKey.related_name` parameter in the
+:class:`~django.db.models.ForeignKey` definition. For example, if the ``Entry``
 model was altered to ``blog = ForeignKey(Blog, related_name='entries')``, the
 above example code would look like this::
 
@@ -1110,15 +1156,6 @@ above example code would look like this::
     # b.entries is a Manager that returns QuerySets.
     >>> b.entries.filter(headline__contains='Lennon')
     >>> b.entries.count()
-
-You cannot access a reverse :class:`~django.db.models.ForeignKey`
-:class:`~django.db.models.Manager` from the class; it must be accessed from an
-instance::
-
-    >>> Blog.entry_set
-    Traceback:
-        ...
-    AttributeError: "Manager must be accessed via instance".
 
 In addition to the :class:`~django.db.models.query.QuerySet` methods defined in
 "Retrieving objects" above, the :class:`~django.db.models.ForeignKey`
@@ -1183,10 +1220,11 @@ An example makes this easier to understand::
     a.entry_set.all() # Returns all Entry objects for this Author.
 
 Like :class:`~django.db.models.ForeignKey`,
-:class:`~django.db.models.ManyToManyField` can specify ``related_name``. In the
-above example, if the :class:`~django.db.models.ManyToManyField` in ``Entry``
-had specified ``related_name='entries'``, then each ``Author`` instance would
-have an ``entries`` attribute instead of ``entry_set``.
+:class:`~django.db.models.ManyToManyField` can specify
+:attr:`~django.db.models.ManyToManyField.related_name`. In the above example,
+if the :class:`~django.db.models.ManyToManyField` in ``Entry`` had specified
+``related_name='entries'``, then each ``Author`` instance would have an
+``entries`` attribute instead of ``entry_set``.
 
 One-to-one relationships
 ------------------------

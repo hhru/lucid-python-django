@@ -30,7 +30,7 @@ or CheetahTemplate_, you should feel right at home with Django's templates.
     </howto/custom-template-tags>` to the template language as needed).
 
 .. _`The Django template language: For Python programmers`: ../templates_python/
-.. _Smarty: http://smarty.php.net/
+.. _Smarty: http://www.smarty.net/
 .. _CheetahTemplate: http://www.cheetahtemplate.org/
 
 Templates
@@ -45,7 +45,9 @@ A template contains **variables**, which get replaced with values when the
 template is evaluated, and **tags**, which control the logic of the template.
 
 Below is a minimal template that illustrates a few basics. Each element will be
-explained later in this document.::
+explained later in this document.
+
+.. code-block:: html+django
 
     {% extends "base_generic.html" %}
 

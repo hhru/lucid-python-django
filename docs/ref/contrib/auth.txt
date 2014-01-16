@@ -111,10 +111,16 @@ Methods
 
     .. method:: is_authenticated()
 
-        Always returns ``True``. This is a way to tell if the user has been
-        authenticated. This does not imply any permissions, and doesn't check
-        if the user is active - it only indicates that the user has provided a
-        valid username and password.
+        Always returns ``True`` (as opposed to
+        ``AnonymousUser.is_authenticated()`` which always returns ``False``).
+        This is a way to tell if the user has been authenticated. This does not
+        imply any permissions, and doesn't check if the user is active or has
+        a valid session. Even though normally you will call this method on
+        ``request.user`` to find out whether it has been populated by the
+        :class:`~django.contrib.auth.middleware.AuthenticationMiddleware`
+        (representing the currently logged-in user), you should know this method
+        returns ``True`` for any :class:`~django.contrib.auth.models.User`
+        instance.
 
     .. method:: get_full_name()
 
@@ -122,17 +128,39 @@ Methods
         the :attr:`~django.contrib.auth.models.User.last_name`, with a space in
         between.
 
+    .. method:: get_short_name()
+
+        .. versionadded:: 1.5
+
+        Returns the :attr:`~django.contrib.auth.models.User.first_name`.
+
     .. method:: set_password(raw_password)
 
         Sets the user's password to the given raw string, taking care of the
         password hashing. Doesn't save the
         :class:`~django.contrib.auth.models.User` object.
 
+        When the ``raw_password`` is ``None``, the password will be set to an
+        unusable password, as if
+        :meth:`~django.contrib.auth.models.User.set_unusable_password()`
+        were used.
+
+        .. versionchanged:: 1.6
+
+            In Django 1.4 and 1.5, a blank string was unintentionally stored
+            as an unusable password.
+
     .. method:: check_password(raw_password)
 
         Returns ``True`` if the given raw string is the correct password for
         the user. (This takes care of the password hashing in making the
         comparison.)
+
+        .. versionchanged:: 1.6
+
+            In Django 1.4 and 1.5, a blank string was unintentionally
+            considered to be an unusable password, resulting in this method
+            returning ``False`` for such a password.
 
     .. method:: set_unusable_password()
 
@@ -223,11 +251,6 @@ Manager methods
 
     .. method:: create_user(username, email=None, password=None, **extra_fields)
 
-        .. versionchanged:: 1.4
-           The ``email`` parameter was made optional. The username
-           parameter is now checked for emptiness and raises a
-           :exc:`~exceptions.ValueError` in case of a negative result.
-
         Creates, saves and returns a :class:`~django.contrib.auth.models.User`.
 
         The :attr:`~django.contrib.auth.models.User.username` and
@@ -242,7 +265,7 @@ Manager methods
         be called.
 
         The ``extra_fields`` keyword arguments are passed through to the
-        :class:`~django.contrib.auth.models.User`'s ``__init__`` method to
+        :class:`~django.contrib.auth.models.User`’s ``__init__`` method to
         allow setting arbitrary fields on a :ref:`custom User model
         <auth-custom-user>`.
 

@@ -10,11 +10,18 @@ When Django handles a file upload, the file data ends up placed in
 </ref/request-response>`). This document explains how files are stored on disk
 and in memory, and how to customize the default behavior.
 
+.. warning::
+
+    There are security risks if you are accepting uploaded content from
+    untrusted users! See the security guide's topic on
+    :ref:`user-uploaded-content-security` for mitigation details.
+
 Basic file uploads
 ==================
 
 Consider a simple form containing a :class:`~django.forms.FileField`::
 
+    # In forms.py...
     from django import forms
 
     class UploadFileForm(forms.Form):
@@ -39,6 +46,7 @@ something like::
 
     from django.http import HttpResponseRedirect
     from django.shortcuts import render_to_response
+    from .forms import UploadFileForm
 
     # Imaginary function to handle an uploaded file.
     from somewhere import handle_uploaded_file
@@ -369,8 +377,8 @@ Custom file upload handlers **must** define the following methods:
     ``receive_data_chunk`` methods. In this way, one handler can be a
     "filter" for other handlers.
 
-    Return ``None`` from ``receive_data_chunk`` to sort-circuit remaining
-    upload handlers from getting this chunk.. This is useful if you're
+    Return ``None`` from ``receive_data_chunk`` to short-circuit remaining
+    upload handlers from getting this chunk. This is useful if you're
     storing the uploaded data yourself and don't want future handlers to
     store a copy of the data.
 
